@@ -1,5 +1,33 @@
 ---
-title: "IEAP-Series04-Rstudio"
-format: html
+title: "IEAP Series 04 – Linear and non-linear regressions"
+author:
+  - Martin Pigeau
+  - Chloé Gilles
+  - Isah Dadiga
+date: today
+format:
+  html:
+    toc: true
+    number-sections: true
+    embed-resources: true
+  gfm: default
+bibliography: references.bib
+csl: apa.csl
 ---
 
+GitHub repository: <https://github.com/ChloeGil-student/IEAP-Series04-RStudio>
+
+{{< include sections/05-git-workflow.qmd >}}
+
+{{< include sections/01-noise.qmd >}}
+
+{{< include sections/02-hrr-literature.qmd >}}
+
+{{< include sections/03-hrr-short.qmd >}}
+
+{{< include sections/04-hrr-long.qmd >}}
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
