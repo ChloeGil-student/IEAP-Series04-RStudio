@@ -33,5 +33,44 @@ long$time_s <- long$time_s - min(long$time_s)
 long <- long[!is.na(long$hr) & long$hr > 30 & long$hr < 230, ]
 ```
 
+The recording contains `r nrow(long)` heart rate values over `r round(max(long$time_s) / 3600, 2)` hours (about one value every `r round(median(diff(long$time_s)), 1)` s).
 
+## Identification of the exercise and recovery periods {#sec-hrr-long-periods}
+
+The dataset provides no activity labels, so the exercise and recovery periods were identified from the heart rate itself. @fig-hrr-long-raw shows two exercise bouts: heart rate stays around 120 to 138 bpm during the first 13 minutes, decreases, then rises again during a second, shorter bout between about 24 and 28 minutes. The global maximum of the smoothed heart rate would place the end of exercise at the very beginning of the recording, before the second bout. We therefore defined the end of exercise as the last time, after 20 minutes, at which the smoothed heart rate (running median over 31 values, about 2.5 min) stays within 5 bpm of the peak of the second bout. The recovery period goes from this time to the end of the recording.
+
+```{r}
+#| label: hrr-long-recovery
+long$hr_smooth <- as.numeric(runmed(long$hr, k = 31))
+
+# Peak of the last exercise bout (searched after 20 min)
+search   <- long$time_s >= 20 * 60
+hr_bout2 <- max(long$hr_smooth[search])
+
+# End of exercise: last time the smoothed HR is within 5 bpm of this peak
+i_peak_long  <- max(which(search & long$hr_smooth >= hr_bout2 - 5))
+t_peak_long  <- long$time_s[i_peak_long]
+hr_peak_long <- long$hr_smooth[i_peak_long]
+
+# Recovery: from the end of exercise to the end of the recording
+rec_long   <- long[long$time_s >= t_peak_long, ]
+rec_long$t <- rec_long$time_s - t_peak_long
+
+hrr60_long <- hr_peak_long - mean(rec_long$hr[rec_long$t >= 55 & rec_long$t <= 65])
+t30_long   <- -1 / coef(lm(log(hr) ~ t, data = rec_long[rec_long$t <= 30, ]))[["t"]]
+```
+
+```{r}
+#| label: fig-hrr-long-raw
+#| fig-cap: "Heart rate during the three-hour recording (grey: raw values, red: smoothed). The dashed line marks the detected end of exercise."
+#| fig-height: 3
+ggplot(long, aes(time_s / 60, hr)) +
+  geom_line(colour = "grey70") +
+  geom_line(aes(y = hr_smooth), colour = "firebrick") +
+  geom_vline(xintercept = t_peak_long / 60, linetype = "dashed") +
+  labs(x = "Time (min)", y = "Heart rate (bpm)") +
+  theme_minimal()
+```
+
+The end of exercise is detected at t = `r round(t_peak_long / 60, 1)` min (HR = `r round(hr_peak_long)` bpm) and the recovery lasts `r round(max(rec_long$t) / 60)` min. HRR60 = `r round(hrr60_long, 1)` bpm and T30 = `r round(t30_long, 1)` s. With one value about every 5 s, T30 is estimated from only `r sum(rec_long$t <= 30)` points, so it is not reliable for this recording.
 
