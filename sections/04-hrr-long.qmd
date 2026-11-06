@@ -1,5 +1,37 @@
----
-title: "04-hrr-long"
-format: html
----
+# Hrr long
+
+# Heart rate recovery: three-hour recording {#sec-hrr-long}
+
+## Data import and exploration {#sec-hrr-long-data}
+
+```{r}
+#| label: hrr-long-download
+url_long <- "https://aidlab-production-datasets.s3.eu-central-1.amazonaws.com/datasets_2026-09-25_cardio_recovery_3h10m.zip"
+dir.create("data", showWarnings = FALSE)
+zip_long <- "data/cardio_recovery_3h10m.zip"
+if (!file.exists(zip_long)) {
+  options(timeout = 600)   # large file
+  download.file(url_long, zip_long, mode = "wb")
+}
+unzip(zip_long, exdir = "data/cardio_recovery_3h10m")
+
+files_long <- list.files("data/cardio_recovery_3h10m", pattern = "\\.csv$",
+                         recursive = TRUE, full.names = TRUE)
+files_long
+```
+
+```{r}
+
+#| label: hrr-long-read
+file_hr_long <- grep("pulse.csv", files_long, value = TRUE)
+raw_long <- read.csv(file_hr_long)
+head(raw_long)
+
+long <- data.frame(time_s = raw_long$timestamp / 1000,   # timestamp in milliseconds
+                   hr     = raw_long$value)
+long$time_s <- long$time_s - min(long$time_s)
+long <- long[!is.na(long$hr) & long$hr > 30 & long$hr < 230, ]
+```
+
+
 
