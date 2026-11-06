@@ -88,7 +88,7 @@ ggplot(pred, aes(x, y, colour = Noise)) +
 
 ## Conclusions {#sec-noise-conclusions}
 
-Our expectations were confirmed on the points that do not depend on chance: the RMSE increased with the noise level and stayed close to $\sigma$, $R^2$ decreased strongly, and the uncertainty of the estimates (standard errors, width of the confidence intervals and of the confidence band in @fig-noise-fits) increased. The three fitted lines are not identical (@fig-noise-lines): the more noise, the further the estimated line *can* be from the true one.
+Our expectations were confirmed on the points that do not depend on chance: the RMSE increased with the noise level and stayed close to $\sigma$, $R^2$ decreased strongly, and the uncertainty of the estimates (standard errors, width of the confidence intervals and of the confidence band in @fig-noise-fit) increased. The three fitted lines are not identical (@fig-noise-lines): the more noise, the further the estimated line *can* be from the true one.
 
 However, with only one dataset per noise level, the error of a given estimate is random. In our simulation the absolute error of the slope was `r paste(sprintf("%.3f", abs(noise_table$Slope - beta1)), collapse = ", ")` for the three noise levels: a single realisation does not allow us to show that the estimates are unbiased, nor to measure precisely how their variability grows with the noise. Our main conclusion is that random noise does not bias the regression estimates, but it reduces their precision and the predictive performance of the model, and makes the explained variance a poor indicator of whether the underlying relationship is the same.
 
