@@ -1,5 +1,234 @@
----
-title: "04-hrr-long"
-format: html
----
+# Heart rate recovery: three-hour recording {#sec-hrr-long}
 
+## Data import and exploration {#sec-hrr-long-data}
+
+```{r}
+#| label: hrr-long-download
+url_long <- "https://aidlab-production-datasets.s3.eu-central-1.amazonaws.com/datasets_2026-09-25_cardio_recovery_3h10m.zip"
+dir.create("data", showWarnings = FALSE)
+zip_long <- "data/cardio_recovery_3h10m.zip"
+if (!file.exists(zip_long)) {
+  options(timeout = 600)   # large file
+  download.file(url_long, zip_long, mode = "wb")
+}
+unzip(zip_long, exdir = "data/cardio_recovery_3h10m")
+
+files_long <- list.files("data/cardio_recovery_3h10m", pattern = "\\.csv$",
+                         recursive = TRUE, full.names = TRUE)
+files_long
+```
+
+```{r}
+#| label: hrr-long-read
+file_hr_long <- grep("pulse.csv", files_long, value = TRUE)
+raw_long <- read.csv(file_hr_long)
+head(raw_long)
+
+long <- data.frame(time_s = raw_long$timestamp / 1000,   # timestamp in milliseconds
+                   hr     = raw_long$value)
+long$time_s <- long$time_s - min(long$time_s)
+long <- long[!is.na(long$hr) & long$hr > 30 & long$hr < 230, ]
+```
+
+The recording contains `r nrow(long)` heart rate values over `r round(max(long$time_s) / 3600, 2)` hours (about one value every `r round(median(diff(long$time_s)), 1)` s).
+
+## Identification of the exercise and recovery periods {#sec-hrr-long-periods}
+
+The dataset provides no activity labels, so the exercise and recovery periods were identified from the heart rate itself. @fig-hrr-long-raw shows two exercise bouts: heart rate stays around 120 to 138 bpm during the first 13 minutes, decreases, then rises again during a second, shorter bout between about 24 and 28 minutes. The global maximum of the smoothed heart rate would place the end of exercise at the very beginning of the recording, before the second bout. We therefore defined the end of exercise as the last time, after 20 minutes, at which the smoothed heart rate (running median over 31 values, about 2.5 min) stays within 5 bpm of the peak of the second bout. The recovery period goes from this time to the end of the recording.
+
+```{r}
+#| label: hrr-long-recovery
+long$hr_smooth <- as.numeric(runmed(long$hr, k = 31))
+
+# Peak of the last exercise bout (searched after 20 min)
+search   <- long$time_s >= 20 * 60
+hr_bout2 <- max(long$hr_smooth[search])
+
+# End of exercise: last time the smoothed HR is within 5 bpm of this peak
+i_peak_long  <- max(which(search & long$hr_smooth >= hr_bout2 - 5))
+t_peak_long  <- long$time_s[i_peak_long]
+hr_peak_long <- long$hr_smooth[i_peak_long]
+
+# Recovery: from the end of exercise to the end of the recording
+rec_long   <- long[long$time_s >= t_peak_long, ]
+rec_long$t <- rec_long$time_s - t_peak_long
+
+hrr60_long <- hr_peak_long - mean(rec_long$hr[rec_long$t >= 55 & rec_long$t <= 65])
+t30_long   <- -1 / coef(lm(log(hr) ~ t, data = rec_long[rec_long$t <= 30, ]))[["t"]]
+```
+
+```{r}
+#| label: fig-hrr-long-raw
+#| fig-cap: "Heart rate during the three-hour recording (grey: raw values, red: smoothed). The dashed line marks the detected end of exercise."
+#| fig-height: 3
+ggplot(long, aes(time_s / 60, hr)) +
+  geom_line(colour = "grey70") +
+  geom_line(aes(y = hr_smooth), colour = "firebrick") +
+  geom_vline(xintercept = t_peak_long / 60, linetype = "dashed") +
+  labs(x = "Time (min)", y = "Heart rate (bpm)") +
+  theme_minimal()
+```
+
+The end of exercise is detected at t = `r round(t_peak_long / 60, 1)` min (HR = `r round(hr_peak_long)` bpm) and the recovery lasts `r round(max(rec_long$t) / 60)` min. HRR60 = `r round(hrr60_long, 1)` bpm and T30 = `r round(t30_long, 1)` s. With one value about every 5 s, T30 is estimated from only `r sum(rec_long$t <= 30)` points, so it is not reliable for this recording.
+
+
+## Model fitting {#sec-hrr-long-fit}
+
+The three models are fitted as for the short recording, on the whole recovery period. The starting values are taken from the data: the asymptote from the mean of the last 60 values, the amplitude from the difference with the heart rate at the end of exercise.
+
+```{r}
+#| label: hrr-long-fit
+hr_end_long <- mean(tail(rec_long$hr, 60))
+amp_long    <- hr_peak_long - hr_end_long
+
+# 1. Linear
+long_lin <- lm(hr ~ t, data = rec_long)
+
+# 2. Mono-exponential
+long_mono <- nls(hr ~ hr_inf + delta * exp(-t / tau),
+                 data = rec_long,
+                 start = list(hr_inf = hr_end_long, delta = amp_long, tau = 120),
+                 algorithm = "port", lower = c(0, 0, 1))
+
+# 3. Bi-exponential (fast + slow phase); NULL if it does not converge
+long_bi <- tryCatch(
+  nls(hr ~ hr_inf + d1 * exp(-t / tau1) + d2 * exp(-t / tau2),
+      data = rec_long,
+      start = list(hr_inf = hr_end_long, d1 = 0.6 * amp_long, tau1 = 40,
+                   d2 = 0.4 * amp_long, tau2 = 600),
+      algorithm = "port", lower = c(0, 0, 1, 0, 1)),
+  error = function(e) NULL)
+
+long_models <- Filter(Negate(is.null),
+                      list(Linear = long_lin, `Mono-exponential` = long_mono,
+                           `Bi-exponential` = long_bi))
+```
+
+```{r}
+#| label: tbl-hrr-long-par
+#| tbl-cap: "Fitted parameters (three-hour recording, whole recovery). Time in seconds, heart rate in bpm."
+long_par <- do.call(rbind, lapply(names(long_models), function(nm) {
+  s <- summary(long_models[[nm]])$coefficients
+  data.frame(Model = nm, Parameter = rownames(s), Estimate = s[, 1], SE = s[, 2])
+}))
+kable(long_par, digits = 4, row.names = FALSE)
+```
+
+```{r}
+#| label: fig-hrr-long-fits
+#| fig-cap: "Recovery data (grey) and fitted models (three-hour recording, whole recovery)."
+#| fig-height: 3
+long_pred <- do.call(rbind, lapply(names(long_models), function(nm)
+  data.frame(t = rec_long$t, hr = rec_long$hr,
+             fitted = as.numeric(fitted(long_models[[nm]])),
+             residual = as.numeric(residuals(long_models[[nm]])), Model = nm)))
+long_pred$Model <- factor(long_pred$Model, levels = names(long_models))
+
+ggplot(long_pred, aes(t / 60, hr)) +
+  geom_point(colour = "grey75", size = 0.3) +
+  geom_line(aes(y = fitted, colour = Model, linetype = Model), linewidth = 0.9) +
+  labs(x = "Time since end of exercise (min)", y = "Heart rate (bpm)") +
+  theme_minimal()
+```
+
+## Model comparison {#sec-hrr-long-comparison}
+
+The models are compared as for the short recording (RMSE, $R^2$, AIC, BIC and residuals). We also report the lag-1 autocorrelation of the residuals (ACF1), which should be close to 0 if the residuals are independent.
+
+```{r}
+#| label: tbl-hrr-long-comp
+#| tbl-cap: "Comparison of the models (three-hour recording, whole recovery)."
+long_comp <- data.frame(
+  Model      = names(long_models),
+  Parameters = sapply(long_models, function(m) length(coef(m))),
+  RMSE       = sapply(long_models, function(m) sqrt(mean(residuals(m)^2))),
+  R2         = sapply(long_models, function(m)
+                 1 - sum(residuals(m)^2) / sum((rec_long$hr - mean(rec_long$hr))^2)),
+  AIC        = sapply(long_models, AIC),
+  BIC        = sapply(long_models, BIC),
+  ACF1       = sapply(long_models, function(m) acf(residuals(m), plot = FALSE)$acf[2]),
+  row.names  = NULL)
+long_best <- long_comp$Model[which.min(long_comp$AIC)]
+kable(long_comp, digits = 3)
+```
+
+```{r}
+#| label: fig-hrr-long-zoom
+#| fig-cap: "First 10 minutes of recovery and fitted models (three-hour recording)."
+#| fig-height: 3
+ggplot(long_pred[long_pred$t <= 10 * 60, ], aes(t / 60, hr)) +
+  geom_point(colour = "grey60", size = 0.8) +
+  geom_line(aes(y = fitted, colour = Model, linetype = Model), linewidth = 0.9) +
+  labs(x = "Time since end of exercise (min)", y = "Heart rate (bpm)") +
+  theme_minimal()
+```
+
+```{r}
+#| label: fig-hrr-long-residuals
+#| fig-cap: "Residuals of the models as a function of time (three-hour recording, whole recovery)."
+#| fig-height: 3.5
+ggplot(long_pred, aes(t / 60, residual)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(size = 0.3, alpha = 0.3) +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE, colour = "firebrick") +
+  facet_wrap(~ Model, ncol = 1) +
+  labs(x = "Time since end of exercise (min)", y = "Residual (bpm)") +
+  theme_minimal()
+```
+
+```{r}
+#| label: hrr-long-ftest
+# Is the bi-exponential significantly better than the mono-exponential?
+if (!is.null(long_bi)) anova(long_mono, long_bi)
+```
+
+## Results for this recording {#sec-hrr-long-results}
+
+Over the whole recovery, the linear model h as the largest error (RMSE = `r sprintf("%.2f", long_comp$RMSE[long_comp$Model == "Linear"])` bpm) and U-shaped residuals (@fig-hrr-long-residuals): the decrease of heart rate is not constant over time. The mono-exponential model gives $\tau$ = `r round(coef(long_mono)[["tau"]] / 60, 1)` min: with a single time constant, it follows the slow decrease and misses the fast drop of the first minutes (@fig-hrr-long-zoom). `r if (!is.null(long_bi)) paste0("The bi-exponential model separates a fast phase (time constant ", round(min(coef(long_bi)[c("tau1", "tau2")]), 1), " s) from a slow phase (", round(max(coef(long_bi)[c("tau1", "tau2")]) / 60, 1), " min), about ", round(max(coef(long_bi)[c("tau1", "tau2")]) / min(coef(long_bi)[c("tau1", "tau2")])), " times longer.") else "The bi-exponential model did not converge on this recording."` According to the AIC and the BIC, the best model is the **`r long_best`** model, and the F test comparing the mono- and bi-exponential models is significant (see F test above).
+
+These estimates must be interpreted with caution. The slow time constant is close to the duration of the recovery (`r round(max(rec_long$t) / 60)` min), so the asymptote of the bi-exponential model (`r sprintf("%.1f", coef(long_bi)[["hr_inf"]])` bpm) is extrapolated below the lowest heart rate observed during recovery (`r min(rec_long$hr)` bpm). The fast phase is estimated from few points, since heart rate is recorded about every 5 s. All models also show positive residuals around 25 minutes after the end of exercise, when heart rate briefly increases again (about 54 min into the recording).
+
+Finally, the residuals of every model are strongly autocorrelated (ACF1 between `r sprintf("%.2f", min(long_comp$ACF1))` and `r sprintf("%.2f", max(long_comp$ACF1))`): heart rate at rest is not a smooth curve but fluctuates (breathing, posture, movements). The standard errors and the p-value of the F test are therefore too optimistic, so we based the comparison mainly on the AIC/BIC and on the residual plots.
+
+# Heart rate recovery: conclusions {#sec-hrr-conclusions}
+
+```{r}
+#| label: tbl-hrr-summary
+#| tbl-cap: "Summary of the two recordings (time constants in seconds, heart rate in bpm)."
+tau_fast <- function(m) if (is.null(m)) NA else min(coef(m)[c("tau1", "tau2")])
+tau_slow <- function(m) if (is.null(m)) NA else max(coef(m)[c("tau1", "tau2")])
+
+hrr_summary <- data.frame(
+  Recording      = c("7.5 min", "3 h (whole recovery)"),
+  HR_end_ex      = c(hr_peak_short, hr_peak_long),
+  HRR60          = c(hrr60_short, hrr60_long),
+  Tau_mono       = c(coef(short_mono)[["tau"]], coef(long_mono)[["tau"]]),
+  Tau_fast       = c(tau_fast(short_bi), tau_fast(long_bi)),
+  Tau_slow       = c(tau_slow(short_bi), tau_slow(long_bi)),
+  Retained_model = c("Mono-exponential", long_best))
+kable(hrr_summary, digits = 1)
+```
+
+## Were our hypotheses supported? {#sec-hrr-hypotheses-check}
+
+- **H1** (linear model gives the poorest fit) is supported for both recordings: the linear model has the largest error and strongly structured residuals (@fig-hrr-short-residuals, @fig-hrr-long-residuals).
+- **H2** (mono-exponential may be sufficient on the 7.5-minute recording if the exercise was submaximal): the mono-exponential model is retained for this recording, because the bi-exponential is only marginally better by AIC, not by BIC, and its parameters are not interpretable (@sec-hrr-short-results). As the exercise intensity is unknown, we cannot directly relate this result to the effect of intensity described by @pierpont2000.
+- **H3** (bi-exponential better on the 3-hour recording) is supported: the `r long_best` model has the lowest AIC and BIC, and it captures the fast drop of the first minutes that the mono-exponential misses (@fig-hrr-long-zoom). This is consistent with a fast and a slow recovery phase [@pecanha2014; @joseph2023].
+- **H4** (the bi-exponential is only justified if it clearly improves the fit): its added complexity is justified on the 3-hour recording but not on the 7.5-minute recording, where the second component cannot be estimated.
+
+## Which model best describes heart rate recovery? {#sec-hrr-best-model}
+
+The same model does not describe both recordings, mainly because they do not show the same part of the recovery. The 7.5-minute recording starts when recovery has already begun and is too short to separate two phases, so a single exponential is the most parsimonious description. The 3-hour recording covers the whole recovery and shows two phases with very different time constants (@tbl-hrr-summary): a fast decrease during the first minutes, followed by a much slower one lasting tens of minutes. One exponential is therefore not enough to describe the entire recovery period, in agreement with the literature [@pierpont2000; @joseph2023].
+
+## Limitations {#sec-hrr-limitations}
+
+- Only two recordings, probably from a single person, with unknown exercise intensity: the results cannot be generalised.
+- The end of exercise is defined from the heart rate itself, with arbitrary rules (smoothing window, threshold of 5 bpm for the 3-hour recording); other choices would change the first points of the recovery, which strongly influence the fast time constant.
+- Heart rate is recorded only about every 5 s, so the fast phase and T30 are estimated from very few points.
+- On the 3-hour recording, the slow time constant is close to the duration of the recovery, so the asymptote is extrapolated below the observed values.
+- The residuals are strongly autocorrelated and heart rate also varies for reasons unrelated to recovery (posture, movements, the second rise around 54 min), so standard errors and p-values are too optimistic.
+- `nls()` depends on the starting values, and the bi-exponential parameters are unstable when a phase is not fully observed.
+
+## Final choice {#sec-hrr-final-choice}
+
+To describe heart rate recovery after exercise, we would choose a **bi-exponential model**, $\mathrm{HR}(t) = \mathrm{HR}_\infty + A_1 e^{-t/\tau_1} + A_2 e^{-t/\tau_2}$, when the recovery is observed long enough to contain both phases. It is supported by our data (lowest AIC and BIC on the 3-hour recording, better fit of the first minutes) and by physiology: the fast component corresponds to parasympathetic reactivation [@imai1994; @pecanha2014], and the slow component to sympathetic withdrawal, linked to the deactivation of the metaboreflex and of thermoregulatory mechanisms [@pecanha2014]. When only a few minutes of recovery are available, as in the 7.5-minute recording, the mono-exponential model is more robust, because the slow phase cannot be estimated reliably [@pierpont2000].
