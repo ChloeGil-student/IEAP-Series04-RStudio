@@ -185,5 +185,11 @@ ggplot(long_pred, aes(t / 60, residual)) +
 if (!is.null(long_bi)) anova(long_mono, long_bi)
 ```
 
+## Results for this recording {#sec-hrr-long-results}
 
+Over the whole recovery, the linear model has the largest error (RMSE = `r sprintf("%.2f", long_comp$RMSE[long_comp$Model == "Linear"])` bpm) and U-shaped residuals (@fig-hrr-long-residuals): the decrease of heart rate is not constant over time. The mono-exponential model gives $\tau$ = `r round(coef(long_mono)[["tau"]] / 60, 1)` min: with a single time constant, it follows the slow decrease and misses the fast drop of the first minutes (@fig-hrr-long-zoom). `r if (!is.null(long_bi)) paste0("The bi-exponential model separates a fast phase (time constant ", round(min(coef(long_bi)[c("tau1", "tau2")]), 1), " s) from a slow phase (", round(max(coef(long_bi)[c("tau1", "tau2")]) / 60, 1), " min), about ", round(max(coef(long_bi)[c("tau1", "tau2")]) / min(coef(long_bi)[c("tau1", "tau2")])), " times longer.") else "The bi-exponential model did not converge on this recording."` According to the AIC and the BIC, the best model is the **`r long_best`** model, and the F test comparing the mono- and bi-exponential models is significant (@tbl-hrr-long-comp).
+
+These estimates must be interpreted with caution. The slow time constant is close to the duration of the recovery (`r round(max(rec_long$t) / 60)` min), so the asymptote of the bi-exponential model (`r sprintf("%.1f", coef(long_bi)[["hr_inf"]])` bpm) is extrapolated below the lowest heart rate observed during recovery (`r min(rec_long$hr)` bpm). The fast phase is estimated from few points, since heart rate is recorded about every 5 s. All models also show positive residuals around 25 minutes after the end of exercise, when heart rate briefly increases again (about 54 min into the recording).
+
+Finally, the residuals of every model are strongly autocorrelated (ACF1 between `r sprintf("%.2f", min(long_comp$ACF1))` and `r sprintf("%.2f", max(long_comp$ACF1))`): heart rate at rest is not a smooth curve but fluctuates (breathing, posture, movements). The standard errors and the p-value of the F test are therefore too optimistic, so we based the comparison mainly on the AIC/BIC and on the residual plots.
 
