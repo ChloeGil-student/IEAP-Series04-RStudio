@@ -1,5 +1,3 @@
-# Hrr long
-
 # Heart rate recovery: three-hour recording {#sec-hrr-long}
 
 ## Data import and exploration {#sec-hrr-long-data}
@@ -21,7 +19,6 @@ files_long
 ```
 
 ```{r}
-
 #| label: hrr-long-read
 file_hr_long <- grep("pulse.csv", files_long, value = TRUE)
 raw_long <- read.csv(file_hr_long)
@@ -187,9 +184,51 @@ if (!is.null(long_bi)) anova(long_mono, long_bi)
 
 ## Results for this recording {#sec-hrr-long-results}
 
-Over the whole recovery, the linear model has the largest error (RMSE = `r sprintf("%.2f", long_comp$RMSE[long_comp$Model == "Linear"])` bpm) and U-shaped residuals (@fig-hrr-long-residuals): the decrease of heart rate is not constant over time. The mono-exponential model gives $\tau$ = `r round(coef(long_mono)[["tau"]] / 60, 1)` min: with a single time constant, it follows the slow decrease and misses the fast drop of the first minutes (@fig-hrr-long-zoom). `r if (!is.null(long_bi)) paste0("The bi-exponential model separates a fast phase (time constant ", round(min(coef(long_bi)[c("tau1", "tau2")]), 1), " s) from a slow phase (", round(max(coef(long_bi)[c("tau1", "tau2")]) / 60, 1), " min), about ", round(max(coef(long_bi)[c("tau1", "tau2")]) / min(coef(long_bi)[c("tau1", "tau2")])), " times longer.") else "The bi-exponential model did not converge on this recording."` According to the AIC and the BIC, the best model is the **`r long_best`** model, and the F test comparing the mono- and bi-exponential models is significant (@tbl-hrr-long-comp).
+Over the whole recovery, the linear model h as the largest error (RMSE = `r sprintf("%.2f", long_comp$RMSE[long_comp$Model == "Linear"])` bpm) and U-shaped residuals (@fig-hrr-long-residuals): the decrease of heart rate is not constant over time. The mono-exponential model gives $\tau$ = `r round(coef(long_mono)[["tau"]] / 60, 1)` min: with a single time constant, it follows the slow decrease and misses the fast drop of the first minutes (@fig-hrr-long-zoom). `r if (!is.null(long_bi)) paste0("The bi-exponential model separates a fast phase (time constant ", round(min(coef(long_bi)[c("tau1", "tau2")]), 1), " s) from a slow phase (", round(max(coef(long_bi)[c("tau1", "tau2")]) / 60, 1), " min), about ", round(max(coef(long_bi)[c("tau1", "tau2")]) / min(coef(long_bi)[c("tau1", "tau2")])), " times longer.") else "The bi-exponential model did not converge on this recording."` According to the AIC and the BIC, the best model is the **`r long_best`** model, and the F test comparing the mono- and bi-exponential models is significant (see F test above).
 
 These estimates must be interpreted with caution. The slow time constant is close to the duration of the recovery (`r round(max(rec_long$t) / 60)` min), so the asymptote of the bi-exponential model (`r sprintf("%.1f", coef(long_bi)[["hr_inf"]])` bpm) is extrapolated below the lowest heart rate observed during recovery (`r min(rec_long$hr)` bpm). The fast phase is estimated from few points, since heart rate is recorded about every 5 s. All models also show positive residuals around 25 minutes after the end of exercise, when heart rate briefly increases again (about 54 min into the recording).
 
 Finally, the residuals of every model are strongly autocorrelated (ACF1 between `r sprintf("%.2f", min(long_comp$ACF1))` and `r sprintf("%.2f", max(long_comp$ACF1))`): heart rate at rest is not a smooth curve but fluctuates (breathing, posture, movements). The standard errors and the p-value of the F test are therefore too optimistic, so we based the comparison mainly on the AIC/BIC and on the residual plots.
 
+# Heart rate recovery: conclusions {#sec-hrr-conclusions}
+
+```{r}
+#| label: tbl-hrr-summary
+#| tbl-cap: "Summary of the two recordings (time constants in seconds, heart rate in bpm)."
+tau_fast <- function(m) if (is.null(m)) NA else min(coef(m)[c("tau1", "tau2")])
+tau_slow <- function(m) if (is.null(m)) NA else max(coef(m)[c("tau1", "tau2")])
+
+hrr_summary <- data.frame(
+  Recording      = c("7.5 min", "3 h (whole recovery)"),
+  HR_end_ex      = c(hr_peak_short, hr_peak_long),
+  HRR60          = c(hrr60_short, hrr60_long),
+  Tau_mono       = c(coef(short_mono)[["tau"]], coef(long_mono)[["tau"]]),
+  Tau_fast       = c(tau_fast(short_bi), tau_fast(long_bi)),
+  Tau_slow       = c(tau_slow(short_bi), tau_slow(long_bi)),
+  Retained_model = c("Mono-exponential", long_best))
+kable(hrr_summary, digits = 1)
+```
+
+## Were our hypotheses supported? {#sec-hrr-hypotheses-check}
+
+- **H1** (linear model gives the poorest fit) is supported for both recordings: the linear model has the largest error and strongly structured residuals (@fig-hrr-short-residuals, @fig-hrr-long-residuals).
+- **H2** (mono-exponential may be sufficient on the 7.5-minute recording if the exercise was submaximal): the mono-exponential model is retained for this recording, because the bi-exponential is only marginally better by AIC, not by BIC, and its parameters are not interpretable (@sec-hrr-short-results). As the exercise intensity is unknown, we cannot directly relate this result to the effect of intensity described by @pierpont2000.
+- **H3** (bi-exponential better on the 3-hour recording) is supported: the `r long_best` model has the lowest AIC and BIC, and it captures the fast drop of the first minutes that the mono-exponential misses (@fig-hrr-long-zoom). This is consistent with a fast and a slow recovery phase [@pecanha2014; @joseph2023].
+- **H4** (the bi-exponential is only justified if it clearly improves the fit): its added complexity is justified on the 3-hour recording but not on the 7.5-minute recording, where the second component cannot be estimated.
+
+## Which model best describes heart rate recovery? {#sec-hrr-best-model}
+
+The same model does not describe both recordings, mainly because they do not show the same part of the recovery. The 7.5-minute recording starts when recovery has already begun and is too short to separate two phases, so a single exponential is the most parsimonious description. The 3-hour recording covers the whole recovery and shows two phases with very different time constants (@tbl-hrr-summary): a fast decrease during the first minutes, followed by a much slower one lasting tens of minutes. One exponential is therefore not enough to describe the entire recovery period, in agreement with the literature [@pierpont2000; @joseph2023].
+
+## Limitations {#sec-hrr-limitations}
+
+- Only two recordings, probably from a single person, with unknown exercise intensity: the results cannot be generalised.
+- The end of exercise is defined from the heart rate itself, with arbitrary rules (smoothing window, threshold of 5 bpm for the 3-hour recording); other choices would change the first points of the recovery, which strongly influence the fast time constant.
+- Heart rate is recorded only about every 5 s, so the fast phase and T30 are estimated from very few points.
+- On the 3-hour recording, the slow time constant is close to the duration of the recovery, so the asymptote is extrapolated below the observed values.
+- The residuals are strongly autocorrelated and heart rate also varies for reasons unrelated to recovery (posture, movements, the second rise around 54 min), so standard errors and p-values are too optimistic.
+- `nls()` depends on the starting values, and the bi-exponential parameters are unstable when a phase is not fully observed.
+
+## Final choice {#sec-hrr-final-choice}
+
+To describe heart rate recovery after exercise, we would choose a **bi-exponential model**, $\mathrm{HR}(t) = \mathrm{HR}_\infty + A_1 e^{-t/\tau_1} + A_2 e^{-t/\tau_2}$, when the recovery is observed long enough to contain both phases. It is supported by our data (lowest AIC and BIC on the 3-hour recording, better fit of the first minutes) and by physiology: the fast component corresponds to parasympathetic reactivation [@imai1994; @pecanha2014], and the slow component to sympathetic withdrawal, linked to the deactivation of the metaboreflex and of thermoregulatory mechanisms [@pecanha2014]. When only a few minutes of recovery are available, as in the 7.5-minute recording, the mono-exponential model is more robust, because the slow phase cannot be estimated reliably [@pierpont2000].
