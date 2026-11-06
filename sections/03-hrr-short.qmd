@@ -68,7 +68,7 @@ ggplot(short, aes(time_s / 60, hr)) +
   theme_minimal()
 ```
 
-The peak is reached at t = `r round(t_peak_short)` s (HR = `r round(hr_peak_short)` bpm) and the recovery lasts `r round(max(rec_short$t) / 60, 1)` min. For comparison with the literature, HRR60 = `r round(hrr60_short, 1)` bpm and T30 = `r round(t30_short, 1)` s [@cole1999; @imai1994].
+The peak is reached at t = `r round(t_peak_short)` s (HR = `r round(hr_peak_short)` bpm) and the recovery lasts `r round(max(rec_short$t) / 60, 1)` min. For comparison with the literature, HRR60 = `r round(hrr60_short, 1)` bpm [@cole1999]. T30 [@imai1994] could not be estimated reliably here (`r round(t30_short)` s): heart rate is only sampled about every 5 s and the recording starts when recovery has already begun, so the first 30 s contain very few points.
 
 ## Model fitting {#sec-hrr-short-fit}
 
@@ -164,6 +164,6 @@ if (!is.null(short_bi)) anova(short_mono, short_bi)
 
 ## Results for this recording {#sec-hrr-short-results}
 
-The linear model has the largest error (RMSE = `r round(short_comp$RMSE[short_comp$Model == "Linear"], 2)` bpm) and its residuals are clearly structured (@fig-hrr-short-residuals): the decrease of heart rate is not constant over time. The mono-exponential model gives a time constant $\tau$ = `r round(coef(short_mono)[["tau"]], 1)` s and an asymptote of `r round(coef(short_mono)[["hr_inf"]], 1)` bpm. `r if (!is.null(short_bi)) paste0("The bi-exponential model separates a fast phase (time constant ", round(min(coef(short_bi)[c("tau1", "tau2")]), 1), " s) and a slow phase (", round(max(coef(short_bi)[c("tau1", "tau2")]), 1), " s).") else "The bi-exponential model did not converge on this recording."`
+The linear model has the largest error (RMSE = `r round(short_comp$RMSE[short_comp$Model == "Linear"], 2)` bpm) and its residuals are clearly structured (@fig-hrr-short-residuals): the decrease of heart rate is not constant over time. The mono-exponential model gives a time constant $\tau$ = `r round(coef(short_mono)[["tau"]], 1)` s and an asymptote of `r round(coef(short_mono)[["hr_inf"]], 1)` bpm.
 
-According to the AIC, the best model for this recording is the **`r short_best`** model. Because the recording is short, a slow phase can only be partly observed, so a slow time constant close to the duration of the recording would be poorly estimated and must be interpreted with caution.
+The bi-exponential model has a slightly lower AIC, but not a lower BIC, and its parameters cannot be interpreted physiologically: its "slow" time constant (`r round(max(coef(short_bi)[c("tau1", "tau2")]))` s) is much longer than the recording, its asymptote drops to `r round(coef(short_bi)[["hr_inf"]], 1)` bpm, and the standard errors are huge (@tbl-hrr-short-par). The second component only describes a slow drift over 7.5 minutes, which the data cannot distinguish from the asymptote. Following H4, the added complexity is not justified: the **mono-exponential** model is the best description of this recording, on which only one recovery phase can be observed.
