@@ -1,5 +1,78 @@
----
-title: "03-hrr-short"
-format: html
----
+# Heart rate recovery: 7.5-minute recording {#sec-hrr-short}
+
+```{r hrr-short-packages}
+library(ggplot2)
+library(knitr)
+```
+
+## Data import and exploration {#sec-hrr-short-data}
+
+The recording is downloaded from the public Aidlab datasets (<https://www.aidlab.com/datasets>) into a `data/` folder, which is ignored by Git.
+
+```{r hrr-short-download}
+url_short <- "https://aidlab-production-datasets.s3.eu-central-1.amazonaws.com/datasets_2026-09-27_cardio_recovery_7m30s.zip"
+dir.create("data", showWarnings = FALSE)
+zip_short <- "data/cardio_recovery_7m30s.zip"
+if (!file.exists(zip_short)) download.file(url_short, zip_short, mode = "wb")
+unzip(zip_short, exdir = "data/cardio_recovery_7m30s")
+
+files_short <- list.files("data/cardio_recovery_7m30s", pattern = "\\.csv$",
+                          recursive = TRUE, full.names = TRUE)
+files_short
+```
+
+```{r hrr-short-read}
+# pulse.csv: heart rate in bpm; timestamps in Unix milliseconds (see README.txt)
+raw_short <- read.csv("data/cardio_recovery_7m30s/pulse.csv")
+head(raw_short)
+
+time_col  <- "timestamp"   # name of the time column
+hr_col    <- "value"       # name of the heart rate column
+time_unit <- 1000          # timestamps are in milliseconds
+
+short <- data.frame(time_s = raw_short[[time_col]] / time_unit,
+                    hr     = raw_short[[hr_col]])
+short$time_s <- short$time_s - min(short$time_s)
+# remove missing and impossible values
+short <- short[!is.na(short$hr) & short$hr > 30 & short$hr < 230, ]
+```
+
+The recording contains `r nrow(short)` heart rate values over `r round(max(short$time_s) / 60, 1)` minutes.
+
+## Identification of the recovery period {#sec-hrr-short-periods}
+
+The end of exercise is defined as the maximum of the heart rate smoothed with a running median (15 values), so that an isolated artefact cannot be selected as the peak. The recovery period goes from this peak to the end of the recording, and time is counted from the peak.
+
+```{r hrr-short-recovery}
+short$hr_smooth <- as.numeric(runmed(short$hr, k = 15))
+i_peak_short  <- which.max(short$hr_smooth)
+t_peak_short  <- short$time_s[i_peak_short]
+hr_peak_short <- short$hr_smooth[i_peak_short]
+
+rec_short   <- short[short$time_s >= t_peak_short, ]
+rec_short$t <- rec_short$time_s - t_peak_short
+
+# Classical indices from the literature
+hrr60_short <- hr_peak_short - mean(rec_short$hr[rec_short$t >= 55 & rec_short$t <= 65])
+t30_short   <- -1 / coef(lm(log(hr) ~ t, data = rec_short[rec_short$t <= 30, ]))[["t"]]
+```
+
+```{r fig-hrr-short-raw}
+#| fig-cap: "Heart rate during the 7.5-minute recording (grey: raw values, red: smoothed). The dashed line marks the detected end of exercise."
+#| fig-height: 3
+ggplot(short, aes(time_s / 60, hr)) +
+  geom_line(colour = "grey60") +
+  geom_line(aes(y = hr_smooth), colour = "firebrick") +
+  geom_vline(xintercept = t_peak_short / 60, linetype = "dashed") +
+  labs(x = "Time (min)", y = "Heart rate (bpm)") +
+  theme_minimal()
+```
+
+The peak is reached at t = `r round(t_peak_short)` s (HR = `r round(hr_peak_short)` bpm) and the recovery lasts `r round(max(rec_short$t) / 60, 1)` min. For comparison with the literature, HRR60 = `r round(hrr60_short, 1)` bpm and T30 = `r round(t30_short, 1)` s [@cole1999; @imai1994].
+
+
+
+
+
+
 

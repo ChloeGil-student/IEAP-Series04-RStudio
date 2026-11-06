@@ -1,0 +1,54 @@
+{
+  "title": "7.5-minute recording with a falling heart rate",
+  "description": "A short recording where heart rate falls from around 159 to 127 bpm after a period of high pulse. ECG, heartbeat intervals, breathing, and movement capture the shift toward a calmer rhythm.",
+  "from_timestamp_ms": 1790502690000,
+  "to_timestamp_ms": 1790503140000,
+  "timestamp_unit": "Unix milliseconds, UTC",
+  "dataTypes": [
+    {
+      "signal": "ecg",
+      "unit": "V",
+      "samples": 111908
+    },
+    {
+      "signal": "pulse",
+      "unit": "bpm",
+      "samples": 91
+    },
+    {
+      "signal": "rr",
+      "unit": "ms",
+      "samples": 1004
+    },
+    {
+      "signal": "respiration",
+      "unit": "Ohm",
+      "samples": 22381
+    },
+    {
+      "signal": "acceleration",
+      "unit": "g",
+      "samples": 25418
+    },
+    {
+      "signal": "body-position",
+      "unit": "position code and label",
+      "samples": 7
+    }
+  ],
+  "license": "MIT",
+  "raw_signal_quality": {
+    "ecg": {
+      "observed_time_coverage": 0.994644,
+      "max_gap_seconds": 0.51
+    },
+    "respiration": {
+      "observed_time_coverage": 0.994142,
+      "max_gap_seconds": 0.525
+    },
+    "acceleration": {
+      "observed_time_coverage": 0.995173,
+      "max_gap_seconds": 0.524
+    }
+  }
+}
