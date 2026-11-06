@@ -1,5 +1,140 @@
----
-title: "01-noise"
-format: html
----
+# How does random noise affect linear regression? {#sec-noise}
+
+```{r noise-packages}
+library(ggplot2)
+library(knitr)
+```
+
+## Expectations {#sec-noise-expectations}
+
+Before running any simulation, we formulated the following expectations. The model is $y = \beta_0 + \beta_1 x + \varepsilon$ with $\varepsilon \sim \mathcal{N}(0, \sigma^2)$, and only $\sigma$ changes between the three datasets.
+
+- **Slope and intercept.** Ordinary least squares estimators are unbiased whatever the noise level: on average, the estimated slope and intercept should be equal to the true values. However, their variance increases with $\sigma^2$ (the standard error of the slope is $\sigma / \sqrt{\sum (x_i - \bar{x})^2}$). With a single dataset per noise level, we therefore expect the estimates to move further away from the true values, in a random direction, when the noise increases, and their confidence intervals to become wider.
+- **Quality of the predictions.** The residual error (RMSE) should be close to $\sigma$, so it should increase roughly in proportion to the noise. Confidence and prediction intervals around the fitted line should widen.
+- **Explained variance.** Since the variance explained by $x$ stays the same while the residual variance increases, $R^2$ should decrease strongly: the expected value is approximately $\beta_1^2 \mathrm{Var}(x) / (\beta_1^2 \mathrm{Var}(x) + \sigma^2)$.
+- **Identical relationships?** The underlying relationship is identical, but the *estimated* lines will not be: they should all be close to the true line, the noisiest one being the most likely to deviate from it.
+
+## Simulation of three datasets {#sec-noise-simulation}
+
+The three datasets share the same true relationship ($\beta_0 = 60$, $\beta_1 = 2$), the same `x` values (100 equally spaced values between 0 and 20) and differ only by the standard deviation of the Gaussian noise.
+
+```{r noise-simulation}
+
+set.seed(2026)
+n      <- 100
+beta0  <- 60
+beta1  <- 2
+x      <- seq(0, 20, length.out = n)
+sigmas <- c(Low = 2, Medium = 8, High = 20)
+
+noise_data <- do.call(rbind, lapply(names(sigmas), function(lv)
+  data.frame(Noise = lv, sigma = sigmas[[lv]], x = x,
+             y = beta0 + beta1 * x + rnorm(n, mean = 0, sd = sigmas[[lv]]))))
+noise_data$Noise <- factor(noise_data$Noise, levels = names(sigmas))
+
+# Theoretical R² for each noise level
+r2_theory <- beta1^2 * var(x) / (beta1^2 * var(x) + sigmas^2)
+```
+
+## Fitting the linear models {#sec-noise-fit}
+
+```{r noise-fit}
+noise_fits <- lapply(split(noise_data, noise_data$Noise), function(d) lm(y ~ x, data = d))
+
+noise_table <- do.call(rbind, lapply(names(noise_fits), function(lv) {
+  m  <- noise_fits[[lv]]
+  s  <- summary(m)
+  ci <- confint(m)
+  data.frame(Noise = lv, sigma = sigmas[[lv]],
+             Intercept = coef(m)[[1]], Slope = coef(m)[[2]],
+             SE_slope = s$coefficients[2, 2],
+             CI95_slope = sprintf("[%.2f; %.2f]", ci[2, 1], ci[2, 2]),
+             R2 = s$r.squared, R2_theory = r2_theory[[lv]],
+             RMSE = sqrt(mean(residuals(m)^2)))
+}))
+```
+
+## Comparison of the three models {#sec-noise-comparison}
+
+```{r tbl-noise}
+#| tbl-cap: "Linear regression fitted to each dataset (true values: intercept = 60, slope = 2)."
+kable(noise_table, digits = 3, row.names = FALSE)
+```
+
+```{r fig-noise-fit}
+#| fig-cap: "Simulated data and fitted regression lines (solid, with 95% confidence band). The dashed line is the true relationship."
+#| fig-height: 3.5
+ggplot(noise_data, aes(x, y)) +
+  geom_point(alpha = 0.4, size = 1) +
+  geom_smooth(method = "lm", formula = y ~ x, colour = "steelblue") +
+  geom_abline(intercept = beta0, slope = beta1, linetype = "dashed") +
+  facet_wrap(~ Noise, labeller = label_both) +
+  labs(x = "x", y = "y")
+```
+
+```{r fig-noise-lines}
+#| fig-cap: "The three fitted lines compared with the true relationship (black, dashed)."
+#| fig-height: 3
+pred <- do.call(rbind, lapply(names(noise_fits), function(lv)
+  data.frame(Noise = lv, x = x, y = predict(noise_fits[[lv]]))))
+pred$Noise <- factor(pred$Noise, levels = names(sigmas))
+ggplot(pred, aes(x, y, colour = Noise)) +
+  geom_line(linewidth = 0.8) +
+  geom_abline(intercept = beta0, slope = beta1, linetype = "dashed") +
+  labs(x = "x", y = "Predicted y")
+```
+
+@tbl-noise shows that the estimated slopes are `r paste(sprintf("%.2f", noise_table$Slope), collapse = ", ")` for the low, medium and high noise levels (true value: 2), and the standard error of the slope increases from `r sprintf("%.3f", noise_table$SE_slope[1])` to `r sprintf("%.3f", noise_table$SE_slope[3])`. The RMSE (`r paste(sprintf("%.1f", noise_table$RMSE), collapse = ", ")`) is close to the true noise level (2, 8, 20), and $R^2$ drops from `r sprintf("%.2f", noise_table$R2[1])` to `r sprintf("%.2f", noise_table$R2[3])`, close to its theoretical values (`r paste(sprintf("%.2f", r2_theory), collapse = ", ")`).
+
+## Conclusions {#sec-noise-conclusions}
+
+Our expectations were confirmed on the points that do not depend on chance: the RMSE increased with the noise level and stayed close to $\sigma$, $R^2$ decreased strongly, and the uncertainty of the estimates (standard errors, width of the confidence intervals and of the confidence band in @fig-noise-fit) increased. The three fitted lines are not identical (@fig-noise-lines): the more noise, the further the estimated line *can* be from the true one.
+
+However, with only one dataset per noise level, the error of a given estimate is random. In our simulation the absolute error of the slope was `r paste(sprintf("%.3f", abs(noise_table$Slope - beta1)), collapse = ", ")` for the three noise levels: a single realisation does not allow us to show that the estimates are unbiased, nor to measure precisely how their variability grows with the noise. Our main conclusion is that random noise does not bias the regression estimates, but it reduces their precision and the predictive performance of the model, and makes the explained variance a poor indicator of whether the underlying relationship is the same.
+
+## A better numerical experiment {#sec-noise-improvement}
+
+To reproduce the theoretical expectations, the experiment must be repeated many times (Monte Carlo simulation): for each noise level we simulate many datasets, fit a model to each, and study the *distribution* of the estimates. Other improvements are to use more noise levels (to see how the standard error grows with $\sigma$), to vary the sample size and the spread of `x`, and to check that the 95% confidence intervals contain the true slope in about 95% of the simulations. We implemented the first and last points:
+
+```{r noise-montecarlo}
+set.seed(42)
+n_rep <- 1000
+sxx <- sum((x - mean(x))^2)
+
+mc <- do.call(rbind, lapply(names(sigmas), function(lv) {
+  est <- t(replicate(n_rep, {
+    y  <- beta0 + beta1 * x + rnorm(n, 0, sigmas[[lv]])
+    m  <- lm(y ~ x)
+    ci <- confint(m)[2, ]
+    c(intercept = coef(m)[[1]], slope = coef(m)[[2]],
+      r2 = summary(m)$r.squared, covered = ci[[1]] <= beta1 & beta1 <= ci[[2]])
+  }))
+  data.frame(Noise = lv, est)
+}))
+mc$Noise <- factor(mc$Noise, levels = names(sigmas))
+
+mc_table <- do.call(rbind, lapply(split(mc, mc$Noise), function(d) {
+  s <- sigmas[[as.character(d$Noise[1])]]
+  data.frame(Noise = d$Noise[1], Mean_slope = mean(d$slope), SD_slope = sd(d$slope),
+             SE_theory = s / sqrt(sxx), Mean_R2 = mean(d$r2),
+             CI_coverage = mean(d$covered))
+}))
+```
+
+```{r tbl-noise-mc}
+#| tbl-cap: "Monte Carlo simulation (1000 datasets per noise level)."
+kable(mc_table, digits = 3, row.names = FALSE)
+```
+
+```{r fig-noise-mc}
+#| fig-cap: "Distribution of the estimated slope over 1000 simulations per noise level. Dashed line: true slope."
+#| fig-height: 3
+ggplot(mc, aes(Noise, slope)) +
+  geom_violin(fill = "grey85") +
+  geom_boxplot(width = 0.1, outlier.size = 0.5) +
+  geom_hline(yintercept = beta1, linetype = "dashed") +
+  labs(x = "Noise level", y = "Estimated slope")
+```
+
+With 1000 repetitions, the mean slope is `r paste(sprintf("%.3f", mc_table$Mean_slope), collapse = ", ")`: practically equal to 2 whatever the noise, which shows that the estimator is unbiased. Its standard deviation (`r paste(sprintf("%.3f", mc_table$SD_slope), collapse = ", ")`) matches the theoretical standard error (`r paste(sprintf("%.3f", mc_table$SE_theory), collapse = ", ")`), so it grows proportionally to $\sigma$, and the confidence intervals contain the true slope in about 95% of the cases (`r paste(sprintf("%.1f%%", 100 * mc_table$CI_coverage), collapse = ", ")`). This repeated experiment reproduces the theory much better than a single dataset per noise level.
 
