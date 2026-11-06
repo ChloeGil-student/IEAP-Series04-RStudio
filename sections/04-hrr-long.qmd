@@ -133,3 +133,57 @@ ggplot(long_pred, aes(t / 60, hr)) +
   labs(x = "Time since end of exercise (min)", y = "Heart rate (bpm)") +
   theme_minimal()
 ```
+
+## Model comparison {#sec-hrr-long-comparison}
+
+The models are compared as for the short recording (RMSE, $R^2$, AIC, BIC and residuals). We also report the lag-1 autocorrelation of the residuals (ACF1), which should be close to 0 if the residuals are independent.
+
+```{r}
+#| label: tbl-hrr-long-comp
+#| tbl-cap: "Comparison of the models (three-hour recording, whole recovery)."
+long_comp <- data.frame(
+  Model      = names(long_models),
+  Parameters = sapply(long_models, function(m) length(coef(m))),
+  RMSE       = sapply(long_models, function(m) sqrt(mean(residuals(m)^2))),
+  R2         = sapply(long_models, function(m)
+                 1 - sum(residuals(m)^2) / sum((rec_long$hr - mean(rec_long$hr))^2)),
+  AIC        = sapply(long_models, AIC),
+  BIC        = sapply(long_models, BIC),
+  ACF1       = sapply(long_models, function(m) acf(residuals(m), plot = FALSE)$acf[2]),
+  row.names  = NULL)
+long_best <- long_comp$Model[which.min(long_comp$AIC)]
+kable(long_comp, digits = 3)
+```
+
+```{r}
+#| label: fig-hrr-long-zoom
+#| fig-cap: "First 10 minutes of recovery and fitted models (three-hour recording)."
+#| fig-height: 3
+ggplot(long_pred[long_pred$t <= 10 * 60, ], aes(t / 60, hr)) +
+  geom_point(colour = "grey60", size = 0.8) +
+  geom_line(aes(y = fitted, colour = Model, linetype = Model), linewidth = 0.9) +
+  labs(x = "Time since end of exercise (min)", y = "Heart rate (bpm)") +
+  theme_minimal()
+```
+
+```{r}
+#| label: fig-hrr-long-residuals
+#| fig-cap: "Residuals of the models as a function of time (three-hour recording, whole recovery)."
+#| fig-height: 3.5
+ggplot(long_pred, aes(t / 60, residual)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(size = 0.3, alpha = 0.3) +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE, colour = "firebrick") +
+  facet_wrap(~ Model, ncol = 1) +
+  labs(x = "Time since end of exercise (min)", y = "Residual (bpm)") +
+  theme_minimal()
+```
+
+```{r}
+#| label: hrr-long-ftest
+# Is the bi-exponential significantly better than the mono-exponential?
+if (!is.null(long_bi)) anova(long_mono, long_bi)
+```
+
+
+
