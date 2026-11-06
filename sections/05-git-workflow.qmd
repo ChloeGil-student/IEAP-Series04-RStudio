@@ -1,5 +1,33 @@
----
-title: "05-git-workflow"
-format: html
----
+# Team workflow with Git {#sec-git-workflow}
 
+## Repository organisation {#sec-git-organisation}
+
+One team member created the public repository with a `README.md`, a `LICENSE` (GNU GPL v3) and an R `.gitignore`, completed before anyone started working: Quarto outputs (`.quarto/`, `*_files/`, `*.html`) and system files (`.DS_Store`) are ignored, because they are regenerated at each rendering and differ from one computer to another.
+
+The report is split into a **master document**, `IEAP-Series04-Rstudio.qmd`, which only contains the YAML header, the link to the repository and the bibliography, and **one sub-document per question** in `sections/`, inserted with Quarto's `include` shortcode when rendering. Each person could therefore work on a different file, which avoids most merge conflicts.
+
+## Branching strategy {#sec-git-branches}
+
+`main` only receives finished work, through pull requests. We created one branch per section, always from an up-to-date `main`:
+
+| Branch | Content |
+|---|---|
+| `01_noise-regression` | @sec-noise |
+| `02_hrr-litterature` | @sec-hrr-literature |
+| `03_hrr-short` | @sec-hrr-short |
+| `04_hrr-long` | @sec-hrr-long and @sec-hrr-conclusions |
+| `05_git-workflow` | this section |
+| `fix-hrr-short-results` | correction of @sec-hrr-short after it was merged |
+| `bibliography` | all the references cited in the report (`references.bib`) |
+
+We used GitHub Desktop to create, publish and switch branches. We tried to make small commits, each describing one step of the work (for example *Add data import and recovery detection for 7.5-min recording*, then *Add model fitting and comparison for 7.5-min recording*), so that the history shows how each section was built.
+
+## Merging and reviews {#sec-git-merging}
+
+When a section was ready, its author opened a pull request to `main` and asked the other member to review it before merging. The literature review was merged first, because its hypotheses and citation keys were needed by the data analyses. Before starting a new section, we updated the branch from `main` (*Branch → Update from main*) so that everyone worked with the latest master document. Corrections made after a merge were done in a new short branch (`fix-hrr-short-results`) rather than directly on `main`. The bibliography (`references.bib`) was completed at the end in a dedicated branch, after checking that every citation key used in the sections had an entry.
+
+## Difficulties and lessons {#sec-git-lessons}
+
+- **Data committed by mistake :** Running the chunks of a section from RStudio created a `data/` folder inside `sections/`, which was committed with the code. We removed it and added `data/` to the `.gitignore`: the data are downloaded by the code and do not need to be versioned. Lesson: the `.gitignore` must anticipate the files created by the analysis, not only those created by RStudio.
+- **Empty sub-documents created with a YAML header :** The placeholder section files created at the start contained a `title:` in their header, which replaced the title of the master document when rendering. Sub-documents included in a master document must not have their own YAML header.
+- **Rendering before merging :** Some problems (wrong data file, implausible estimates) only appeared when rendering the whole report. Rendering the master document before each pull request is the simplest way to check that a section works with the others.
