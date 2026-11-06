@@ -1,3 +1,5 @@
+# Heart rate recovery after exercise: predictions from the literature {#sec-hrr-literature}
+
 ## Physiological mechanisms {#sec-hrr-mechanisms}
 
 The decrease of HR after exercise results from changes in the autonomic control of the heart [@pecanha2014]. Two mechanisms act with different time courses:
