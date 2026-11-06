@@ -51,6 +51,9 @@ rsconnect/
 
 .quarto/
 *_files/
+!IEAP-Series04-Rstudio_files/
+IEAP-Series04-Rstudio_files/libs/
+IEAP-Series04-Rstudio_files/figure-html/
 *.html
 .DS_Store
 data/
