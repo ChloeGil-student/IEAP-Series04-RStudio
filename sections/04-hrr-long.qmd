@@ -74,3 +74,62 @@ ggplot(long, aes(time_s / 60, hr)) +
 
 The end of exercise is detected at t = `r round(t_peak_long / 60, 1)` min (HR = `r round(hr_peak_long)` bpm) and the recovery lasts `r round(max(rec_long$t) / 60)` min. HRR60 = `r round(hrr60_long, 1)` bpm and T30 = `r round(t30_long, 1)` s. With one value about every 5 s, T30 is estimated from only `r sum(rec_long$t <= 30)` points, so it is not reliable for this recording.
 
+
+## Model fitting {#sec-hrr-long-fit}
+
+The three models are fitted as for the short recording, on the whole recovery period. The starting values are taken from the data: the asymptote from the mean of the last 60 values, the amplitude from the difference with the heart rate at the end of exercise.
+
+```{r}
+#| label: hrr-long-fit
+hr_end_long <- mean(tail(rec_long$hr, 60))
+amp_long    <- hr_peak_long - hr_end_long
+
+# 1. Linear
+long_lin <- lm(hr ~ t, data = rec_long)
+
+# 2. Mono-exponential
+long_mono <- nls(hr ~ hr_inf + delta * exp(-t / tau),
+                 data = rec_long,
+                 start = list(hr_inf = hr_end_long, delta = amp_long, tau = 120),
+                 algorithm = "port", lower = c(0, 0, 1))
+
+# 3. Bi-exponential (fast + slow phase); NULL if it does not converge
+long_bi <- tryCatch(
+  nls(hr ~ hr_inf + d1 * exp(-t / tau1) + d2 * exp(-t / tau2),
+      data = rec_long,
+      start = list(hr_inf = hr_end_long, d1 = 0.6 * amp_long, tau1 = 40,
+                   d2 = 0.4 * amp_long, tau2 = 600),
+      algorithm = "port", lower = c(0, 0, 1, 0, 1)),
+  error = function(e) NULL)
+
+long_models <- Filter(Negate(is.null),
+                      list(Linear = long_lin, `Mono-exponential` = long_mono,
+                           `Bi-exponential` = long_bi))
+```
+
+```{r}
+#| label: tbl-hrr-long-par
+#| tbl-cap: "Fitted parameters (three-hour recording, whole recovery). Time in seconds, heart rate in bpm."
+long_par <- do.call(rbind, lapply(names(long_models), function(nm) {
+  s <- summary(long_models[[nm]])$coefficients
+  data.frame(Model = nm, Parameter = rownames(s), Estimate = s[, 1], SE = s[, 2])
+}))
+kable(long_par, digits = 4, row.names = FALSE)
+```
+
+```{r}
+#| label: fig-hrr-long-fits
+#| fig-cap: "Recovery data (grey) and fitted models (three-hour recording, whole recovery)."
+#| fig-height: 3
+long_pred <- do.call(rbind, lapply(names(long_models), function(nm)
+  data.frame(t = rec_long$t, hr = rec_long$hr,
+             fitted = as.numeric(fitted(long_models[[nm]])),
+             residual = as.numeric(residuals(long_models[[nm]])), Model = nm)))
+long_pred$Model <- factor(long_pred$Model, levels = names(long_models))
+
+ggplot(long_pred, aes(t / 60, hr)) +
+  geom_point(colour = "grey75", size = 0.3) +
+  geom_line(aes(y = fitted, colour = Model, linetype = Model), linewidth = 0.9) +
+  labs(x = "Time since end of exercise (min)", y = "Heart rate (bpm)") +
+  theme_minimal()
+```
