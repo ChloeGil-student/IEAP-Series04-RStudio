@@ -1,5 +1,14 @@
----
-title: "02-hrr-literature"
-format: html
----
+Physiological mechanisms {#sec-hrr-mechanisms}
+
+The decrease of HR after exercise results from changes in the autonomic control of the heart [@pecanha2014]. Two mechanisms act with different time courses:
+
+Parasympathetic (vagal) reactivation mainly drives the early, fast decrease of HR. It is triggered by the deactivation of central command and of the mechanoreflex as soon as the exercise stops [@pecanha2014; @imai1994]. Sympathetic withdrawal mainly drives the later, slow decrease of HR. It is linked to the progressive deactivation of the metaboreflex and of thermoregulatory mechanisms [@pecanha2014].
+
+These pathways are impaired in cardiovascular diseases, which explains the slower recovery observed in these patients and its association with mortality [@cole1999; @pecanha2014].
+
+Expected characteristics of the recovery curve {#sec-hrr-curve}
+
+From the literature, the recovery curve should show:
+
+A fast initial decrease during the first tens of seconds, related to vagal reactivation, which is the period described by T30 [@imai1994]. A slower decrease afterwards, related to sympathetic withdrawal [@pecanha2014]. A progressive flattening of the curve towards an asymptotic value, $\mathrm{HR}_\infty$, rather than a constant rate of decrease. A dependence on exercise intensity: after maximal exercise, the time constant of a mono-exponential fit is unstable and only stabilises after about 3 minutes of recording [@pierpont2000]. Is one model sufficient for the whole recovery? {#sec-hrr-one-model}
 
